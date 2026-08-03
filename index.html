@@ -88,7 +88,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_ZE5TvNcC2cHMQXJAz3spjQ_gqAanMKp";
 // ======================================================================
 
 const configured = SUPABASE_URL.startsWith("http") && SUPABASE_ANON_KEY.length > 20;
-const supabase = configured ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+const supabaseClient = configured ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
 function normalize(s) {
   return (s || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
@@ -151,7 +151,7 @@ function App() {
   useEffect(() => {
     if (!configured) { setLoaded(true); return; }
     (async () => {
-      const { data, error } = await supabase.from("app_data").select("*");
+      const { data, error } = await supabaseClient.from("app_data").select("*");
       if (!error && data) {
         setPos(data.filter(r => r.kind === "po").map(r => r.payload));
         setInvoices(data.filter(r => r.kind === "invoice").map(r => r.payload));
@@ -161,8 +161,8 @@ function App() {
   }, []);
 
   async function saveRecord(kind, record) {
-    if (!supabase) return;
-    await supabase.from("app_data").upsert({ id: record.id, kind, payload: record });
+    if (!supabaseClient) return;
+    await supabaseClient.from("app_data").upsert({ id: record.id, kind, payload: record });
   }
 
   async function handleFiles(fileList, kind) {
@@ -250,7 +250,7 @@ function App() {
 
   async function resetAll() {
     if (!window.confirm("Clear all uploaded purchase orders and invoices for everyone? This cannot be undone.")) return;
-    if (supabase) await supabase.from("app_data").delete().neq("id", "");
+    if (supabaseClient) await supabaseClient.from("app_data").delete().neq("id", "");
     setPos([]); setInvoices([]); setQueue([]);
   }
 
