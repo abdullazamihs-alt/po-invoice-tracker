@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PO &amp; Invoice Tracker</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    --ink: #1a2b2b;
+    --teal-deep: #0f3d3d;
+    --teal: #1f5c5c;
+    --teal-soft: #e7f0ee;
+    --sand: #c98a4b;
+    --line: #dbe3e0;
+    --paper: #fbfaf8;
+    --ok-bg: #e4f2e6; --ok-ink: #256d3b;
+    --pending-bg: #fdecec; --pending-ink: #b23b3b;
+    --review-bg: #fff4e0; --review-ink: #97650f;
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    background: var(--paper);
+    margin: 0;
+  }
+  #app-root { padding: 28px 32px 60px; min-height: 100vh; max-width: 980px; margin: 0 auto; }
+  .header { margin-bottom: 28px; }
+  .eyebrow { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--sand); font-weight: 700; margin-bottom: 6px; }
+  h1 { font-size: 26px; margin: 0 0 6px; font-weight: 700; color: var(--teal-deep); letter-spacing: -0.01em; }
+  .subhead { color: #5a6b68; font-size: 14px; line-height: 1.5; max-width: 640px; }
+  .config-warning { background: #fff4e0; border: 1px solid #e8c98a; color: #7a5510; padding: 12px 16px; border-radius: 8px; font-size: 13px; margin-bottom: 20px; }
+  .drop-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 24px 0 8px; }
+  .dropzone { border: 1.5px dashed var(--line); border-radius: 10px; padding: 22px; background: #fff; text-align: center; cursor: pointer; transition: border-color .15s ease, background .15s ease; position: relative; }
+  .dropzone:hover, .dropzone.drag { border-color: var(--teal); background: var(--teal-soft); }
+  .dz-icon { font-size: 22px; margin-bottom: 6px; }
+  .dz-title { font-weight: 700; font-size: 14px; color: var(--teal-deep); margin-bottom: 2px; }
+  .dz-sub { font-size: 12px; color: #7a8a87; }
+  .dropzone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .queue { margin: 6px 0 26px; display: flex; flex-direction: column; gap: 6px; }
+  .queue-item { display: flex; align-items: center; gap: 10px; font-size: 12.5px; padding: 7px 10px; border-radius: 7px; background: #fff; border: 1px solid var(--line); }
+  .queue-item .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot.working { background: var(--sand); animation: pulse 1s infinite ease-in-out; }
+  .dot.done { background: #3a9a56; }
+  .dot.error { background: #c94b4b; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+  .queue-item .fname { flex: 1; color: #3d4c4a; }
+  .queue-item .qstatus { color: #8a9895; font-size: 11.5px; }
+  .summary-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin: 20px 0 30px; }
+  .stat { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .stat .num { font-size: 22px; font-weight: 700; color: var(--teal-deep); }
+  .stat .lbl { font-size: 11.5px; color: #7a8a87; margin-top: 2px; }
+  .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--teal); margin: 30px 0 10px; display: flex; align-items: center; gap: 8px; }
+  .section-title .count { background: var(--teal-soft); color: var(--teal-deep); font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 700; letter-spacing: 0; text-transform: none; }
+  table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; font-size: 13px; }
+  thead th { text-align: left; background: var(--teal-deep); color: #fff; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; padding: 9px 12px; font-weight: 600; }
+  tbody td { padding: 9px 12px; border-top: 1px solid var(--line); vertical-align: top; }
+  tbody tr:hover { background: #fafcfb; }
+  .po-num { font-weight: 700; color: var(--teal-deep); font-size: 12px; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
+  .badge.received { background: var(--ok-bg); color: var(--ok-ink); }
+  .badge.pending { background: var(--pending-bg); color: var(--pending-ink); }
+  .muted { color: #93a19e; font-size: 12px; }
+  .review-card { background: #fff; border: 1px solid var(--line); border-left: 3px solid var(--sand); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; font-size: 13px; }
+  .review-card .rtitle { font-weight: 700; margin-bottom: 6px; }
+  .review-card select { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); font-size: 12.5px; margin-top: 6px; }
+  .empty { text-align: center; padding: 30px 20px; color: #93a19e; font-size: 13px; }
+  .footer-note { margin-top: 34px; font-size: 11.5px; color: #93a19e; line-height: 1.6; border-top: 1px solid var(--line); padding-top: 14px; }
+  .reset-btn { background: none; border: 1px solid var(--line); color: #7a8a87; font-size: 11.5px; padding: 5px 10px; border-radius: 6px; cursor: pointer; }
+  .reset-btn:hover { border-color: #c94b4b; color: #c94b4b; }
+  .top-actions { display:flex; justify-content: flex-end; }
+</style>
+</head>
+<body>
+<div id="app-root"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useCallback } = React;
+
+// ======================================================================
+// PASTE YOUR SUPABASE PROJECT DETAILS HERE (see setup guide, Step 2)
+// ======================================================================
+const SUPABASE_URL = "PASTE_YOUR_SUPABASE_URL_HERE";
+const SUPABASE_ANON_KEY = "PASTE_YOUR_SUPABASE_ANON_KEY_HERE";
+// ======================================================================
+
+const configured = SUPABASE_URL.startsWith("http") && SUPABASE_ANON_KEY.length > 20;
+const supabase = configured ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+function normalize(s) {
+  return (s || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+}
+function wordOverlapScore(a, b) {
+  const wa = new Set(normalize(a).split(" ").filter(w => w.length > 2));
+  const wb = new Set(normalize(b).split(" ").filter(w => w.length > 2));
+  if (wa.size === 0 || wb.size === 0) return 0;
+  let inter = 0;
+  wa.forEach(w => { if (wb.has(w)) inter++; });
+  return inter / Math.min(wa.size, wb.size);
+}
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result.split(",")[1]);
+    r.onerror = () => reject(new Error("read failed"));
+    r.readAsDataURL(file);
+  });
+}
+function uid() { return Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
+
+async function extractViaServer(file, kind) {
+  const base64 = await fileToBase64(file);
+  const isPdf = file.type === "application/pdf";
+  const mediaType = isPdf ? "application/pdf" : (file.type || "image/jpeg");
+  const contentBlock = isPdf
+    ? { type: "document", source: { type: "base64", media_type: mediaType, data: base64 } }
+    : { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } };
+
+  const instructions = kind === "po"
+    ? `This file is a PURCHASE ORDER. Extract JSON only, no prose, no markdown fences, matching exactly this shape:
+{"po_number": string|null, "date": string|null (YYYY-MM-DD), "supplier": string|null, "items": [{"description": string, "qty": number|null, "unit_price": number|null}]}
+If a field truly cannot be found, use null. Extract every distinct line item.`
+    : `This file is a SUPPLIER INVOICE. Extract JSON only, no prose, no markdown fences, matching exactly this shape:
+{"invoice_number": string|null, "po_number_referenced": string|null, "supplier": string|null, "date": string|null (YYYY-MM-DD), "total_amount": number|null, "items": [{"description": string, "qty": number|null, "unit_price": number|null}]}
+Look carefully anywhere on the document for a referenced PO number. If none is printed, use null. Extract every distinct line item.`;
+
+  const resp = await fetch("/api/extract", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contentBlock, instructions }),
+  });
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data.error || "Extraction failed");
+  const textBlock = (data.content || []).find(b => b.type === "text");
+  if (!textBlock) throw new Error("No response from model");
+  let cleaned = textBlock.text.trim().replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
+  return JSON.parse(cleaned);
+}
+
+function App() {
+  const [pos, setPos] = useState([]);
+  const [invoices, setInvoices] = useState([]);
+  const [queue, setQueue] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+  const [dragPo, setDragPo] = useState(false);
+  const [dragInv, setDragInv] = useState(false);
+
+  useEffect(() => {
+    if (!configured) { setLoaded(true); return; }
+    (async () => {
+      const { data, error } = await supabase.from("app_data").select("*");
+      if (!error && data) {
+        setPos(data.filter(r => r.kind === "po").map(r => r.payload));
+        setInvoices(data.filter(r => r.kind === "invoice").map(r => r.payload));
+      }
+      setLoaded(true);
+    })();
+  }, []);
+
+  async function saveRecord(kind, record) {
+    if (!supabase) return;
+    await supabase.from("app_data").upsert({ id: record.id, kind, payload: record });
+  }
+
+  async function handleFiles(fileList, kind) {
+    const files = Array.from(fileList || []);
+    for (const file of files) {
+      const qid = uid();
+      setQueue(q => [...q, { id: qid, name: file.name, status: "working" }]);
+      try {
+        const extracted = await extractViaServer(file, kind);
+        if (kind === "po") {
+          const record = {
+            id: uid(), fileName: file.name,
+            poNumber: extracted.po_number || "Unknown",
+            date: extracted.date || null,
+            supplier: extracted.supplier || null,
+            items: (extracted.items || []).map(it => ({ id: uid(), ...it })),
+          };
+          setPos(prev => [...prev, record]);
+          await saveRecord("po", record);
+        } else {
+          const record = {
+            id: uid(), fileName: file.name,
+            invoiceNumber: extracted.invoice_number || "Unknown",
+            poNumberReferenced: extracted.po_number_referenced || null,
+            supplier: extracted.supplier || null,
+            date: extracted.date || null,
+            totalAmount: extracted.total_amount || null,
+            items: (extracted.items || []).map(it => ({ id: uid(), ...it, matchedPoItemId: null })),
+          };
+          setInvoices(prev => [...prev, record]);
+          await saveRecord("invoice", record);
+        }
+        setQueue(q => q.map(item => item.id === qid ? { ...item, status: "done" } : item));
+      } catch (err) {
+        console.error(err);
+        setQueue(q => q.map(item => item.id === qid ? { ...item, status: "error", error: String(err.message || err) } : item));
+      }
+    }
+  }
+
+  const matches = {};
+  const usedInvoiceItems = new Set();
+  pos.forEach(po => {
+    po.items.forEach(poItem => {
+      let best = null;
+      invoices.forEach(inv => {
+        inv.items.forEach(invItem => {
+          const key = inv.id + "::" + invItem.id;
+          if (usedInvoiceItems.has(key)) return;
+          if (invItem.matchedPoItemId && invItem.matchedPoItemId !== poItem.id) return;
+          let score = wordOverlapScore(poItem.description, invItem.description);
+          const poNumMatch = inv.poNumberReferenced && po.poNumber && normalize(inv.poNumberReferenced) === normalize(po.poNumber);
+          if (invItem.matchedPoItemId === poItem.id) score = 1;
+          if (poNumMatch) score += 0.15;
+          if (score > (best ? best.score : 0)) best = { invoice: inv, item: invItem, score };
+        });
+      });
+      if (best && best.score >= 0.5) {
+        matches[poItem.id] = best;
+        usedInvoiceItems.add(best.invoice.id + "::" + best.item.id);
+      }
+    });
+  });
+
+  const matchedKeys = new Set(Object.values(matches).map(m => m.invoice.id + "::" + m.item.id));
+  const unmatchedInvoiceItems = [];
+  invoices.forEach(inv => inv.items.forEach(it => {
+    const key = inv.id + "::" + it.id;
+    if (!matchedKeys.has(key)) unmatchedInvoiceItems.push({ invoice: inv, item: it });
+  }));
+
+  const totalItems = pos.reduce((s, po) => s + po.items.length, 0);
+  const receivedItems = Object.keys(matches).length;
+  const pendingItems = totalItems - receivedItems;
+
+  async function manualLink(poItemId, invoiceId, invoiceItemId) {
+    const next = invoices.map(inv => {
+      if (inv.id !== invoiceId) return inv;
+      const updated = { ...inv, items: inv.items.map(it => it.id === invoiceItemId ? { ...it, matchedPoItemId: poItemId } : it) };
+      saveRecord("invoice", updated);
+      return updated;
+    });
+    setInvoices(next);
+  }
+
+  async function resetAll() {
+    if (!window.confirm("Clear all uploaded purchase orders and invoices for everyone? This cannot be undone.")) return;
+    if (supabase) await supabase.from("app_data").delete().neq("id", "");
+    setPos([]); setInvoices([]); setQueue([]);
+  }
+
+  const allPoItemOptions = [];
+  pos.forEach(po => po.items.forEach(it => allPoItemOptions.push({ id: it.id, label: `${po.poNumber} — ${it.description}` })));
+
+  if (!loaded) return <div className="empty">Loading…</div>;
+
+  return (
+    <div>
+      <div className="header">
+        <div className="eyebrow">Procurement · Auto-Matching</div>
+        <h1>PO &amp; Invoice Tracker</h1>
+        <div className="subhead">Drop in a purchase order once, then drop in each supplier invoice as it arrives. Line items are read automatically and matched — shared with your whole team, no chat session needed.</div>
+      </div>
+
+      {!configured && (
+        <div className="config-warning">
+          ⚠️ This app isn't fully set up yet — the Supabase URL and key near the top of index.html still say "PASTE_YOUR..." Follow Step 5 of the setup guide to finish connecting shared storage.
+        </div>
+      )}
+
+      <div className="drop-row">
+        <label className={"dropzone" + (dragPo ? " drag" : "")}
+          onDragOver={e => { e.preventDefault(); setDragPo(true); }}
+          onDragLeave={() => setDragPo(false)}
+          onDrop={e => { e.preventDefault(); setDragPo(false); handleFiles(e.dataTransfer.files, "po"); }}>
+          <div className="dz-icon">📋</div>
+          <div className="dz-title">Purchase Orders</div>
+          <div className="dz-sub">Drop or click to upload (PDF, JPG, PNG)</div>
+          <input type="file" accept=".pdf,image/*" multiple onChange={e => handleFiles(e.target.files, "po")} />
+        </label>
+        <label className={"dropzone" + (dragInv ? " drag" : "")}
+          onDragOver={e => { e.preventDefault(); setDragInv(true); }}
+          onDragLeave={() => setDragInv(false)}
+          onDrop={e => { e.preventDefault(); setDragInv(false); handleFiles(e.dataTransfer.files, "invoice"); }}>
+          <div className="dz-icon">🧾</div>
+          <div className="dz-title">Supplier Invoices</div>
+          <div className="dz-sub">Drop or click to upload (PDF, JPG, PNG)</div>
+          <input type="file" accept=".pdf,image/*" multiple onChange={e => handleFiles(e.target.files, "invoice")} />
+        </label>
+      </div>
+
+      {queue.length > 0 && (
+        <div className="queue">
+          {queue.slice().reverse().map(q => (
+            <div className="queue-item" key={q.id}>
+              <div className={"dot " + q.status}></div>
+              <div className="fname">{q.name}</div>
+              <div className="qstatus">{q.status === "working" ? "Reading…" : q.status === "done" ? "Processed" : ("Failed: " + (q.error || "error"))}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="summary-row">
+        <div className="stat"><div className="num">{totalItems}</div><div className="lbl">Total items ordered</div></div>
+        <div className="stat"><div className="num">{receivedItems}</div><div className="lbl">Matched to invoice</div></div>
+        <div className="stat"><div className="num">{pendingItems}</div><div className="lbl">Still pending</div></div>
+        <div className="stat"><div className="num">{unmatchedInvoiceItems.length}</div><div className="lbl">Invoice lines to review</div></div>
+      </div>
+
+      <div className="section-title">Order Status <span className="count">{pos.length} PO{pos.length === 1 ? "" : "s"}</span></div>
+      {pos.length === 0 ? (
+        <div className="empty">No purchase orders uploaded yet. Drop one in above to get started.</div>
+      ) : (
+        <table>
+          <thead><tr><th>PO #</th><th>Item</th><th>Qty</th><th>Status</th><th>Matched Invoice</th></tr></thead>
+          <tbody>
+            {pos.map(po => po.items.map((item, idx) => {
+              const m = matches[item.id];
+              return (
+                <tr key={item.id}>
+                  <td>{idx === 0 ? <span className="po-num">{po.poNumber}</span> : ""}</td>
+                  <td>{item.description}</td>
+                  <td>{item.qty ?? <span className="muted">—</span>}</td>
+                  <td>{m ? <span className="badge received">Received</span> : <span className="badge pending">Pending</span>}</td>
+                  <td>{m ? `${m.invoice.invoiceNumber}${m.invoice.supplier ? " · " + m.invoice.supplier : ""}` : <span className="muted">Awaiting invoice</span>}</td>
+                </tr>
+              );
+            }))}
+          </tbody>
+        </table>
+      )}
+
+      {unmatchedInvoiceItems.length > 0 && (
+        <React.Fragment>
+          <div className="section-title">Needs Review <span className="count">{unmatchedInvoiceItems.length}</span></div>
+          {unmatchedInvoiceItems.map(({ invoice, item }) => (
+            <div className="review-card" key={invoice.id + item.id}>
+              <div className="rtitle">{item.description} <span className="muted">— Invoice {invoice.invoiceNumber}{invoice.supplier ? " · " + invoice.supplier : ""}</span></div>
+              <div className="muted">Couldn't confidently match this line to a PO item. Link it manually:</div>
+              <select onChange={e => { if (e.target.value) manualLink(e.target.value, invoice.id, item.id); }} defaultValue="">
+                <option value="">Select matching PO item…</option>
+                {allPoItemOptions.map(opt => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
+              </select>
+            </div>
+          ))}
+        </React.Fragment>
+      )}
+
+      <div className="top-actions" style={{ marginTop: 30 }}>
+        <button className="reset-btn" onClick={resetAll}>Clear all data</button>
+      </div>
+
+      <div className="footer-note">
+        Extraction runs via a hidden server function, so the API key never appears in this page's code. Matching is based on item description and, where printed, a referenced PO number — low-confidence matches land in "Needs Review" for a one-click manual link. Data is shared live across everyone using this link.
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("app-root")).render(<App />);
+</script>
+</body>
+</html>
