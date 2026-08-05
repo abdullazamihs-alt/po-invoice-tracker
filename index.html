@@ -87,6 +87,8 @@
   .row-remove:hover { border-color: var(--pending-ink); color: var(--pending-ink); }
   .add-item-btn { background: none; border: 1px dashed var(--line); color: var(--teal); font-size: 12.5px; padding: 7px 12px; border-radius: 6px; cursor: pointer; font-weight: 600; }
   .add-item-btn:hover { border-color: var(--teal); }
+  .download-btn { background: #fff; border: 1px solid var(--teal); color: var(--teal-deep); font-size: 11.5px; font-weight: 700; padding: 5px 10px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+  .download-btn:hover { background: var(--teal-deep); color: #fff; }
 </style>
 </head>
 <body>
@@ -364,6 +366,46 @@ function App() {
     setInvoices(next);
   }
 
+  async function downloadPO(po) {
+    try {
+      const resp = await fetch("/api/generate-po", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          poNumber: po.poNumber,
+          supplier: po.supplier,
+          date: po.date,
+          items: po.items.map(it => ({
+            description: it.description,
+            unit: it.unit || "",
+            qty: it.qty,
+            unit_price: it.unit_price,
+          })),
+        }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        alert("Couldn't generate the file: " + (err.error || resp.statusText));
+        return;
+      }
+      const overflow = Number(resp.headers.get("X-PO-Overflow-Items") || 0);
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `PO_${(po.poNumber || "order").replace(/\//g, "-")}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      if (overflow > 0) {
+        alert(`Heads up: this PO has ${overflow} more item(s) than the printable page has room for. All items are saved in the file's "Entry" tab, but only the first 6 show on the printable "PO Print" tab.`);
+      }
+    } catch (err) {
+      alert("Couldn't generate the file: " + String(err.message || err));
+    }
+  }
+
   async function resetAll() {
     if (!window.confirm("Clear all uploaded purchase orders and invoices for everyone? This cannot be undone.")) return;
     if (supabaseClient) await supabaseClient.from("app_data").delete().neq("id", "");
@@ -486,7 +528,7 @@ function App() {
         <div className="empty">No purchase orders uploaded yet. Drop one in above to get started.</div>
       ) : (
         <table>
-          <thead><tr><th>PO #</th><th>Item</th><th>Qty</th><th>Status</th><th>Matched Invoice</th><th>Logged By</th></tr></thead>
+          <thead><tr><th>PO #</th><th>Item</th><th>Qty</th><th>Status</th><th>Matched Invoice</th><th>Logged By</th><th></th></tr></thead>
           <tbody>
             {pos.map(po => po.items.map((item, idx) => {
               const m = matches[item.id];
@@ -498,6 +540,7 @@ function App() {
                   <td>{m ? <span className="badge received">Received</span> : <span className="badge pending">Pending</span>}</td>
                   <td>{m ? `${m.invoice.invoiceNumber}${m.invoice.supplier ? " · " + m.invoice.supplier : ""}` : <span className="muted">Awaiting invoice</span>}</td>
                   <td className="muted">{m ? m.invoice.uploadedBy : po.uploadedBy}</td>
+                  <td>{idx === 0 ? <button className="download-btn" onClick={() => downloadPO(po)}>⬇ Download</button> : ""}</td>
                 </tr>
               );
             }))}
