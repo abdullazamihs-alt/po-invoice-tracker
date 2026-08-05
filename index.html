@@ -67,6 +67,26 @@
   .reset-btn { background: none; border: 1px solid var(--line); color: #7a8a87; font-size: 11.5px; padding: 5px 10px; border-radius: 6px; cursor: pointer; }
   .reset-btn:hover { border-color: #c94b4b; color: #c94b4b; }
   .top-actions { display:flex; justify-content: flex-end; }
+  .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+  .login-card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 32px; width: 340px; box-shadow: 0 4px 20px rgba(15,61,61,0.06); }
+  .login-label { display: block; font-size: 12px; font-weight: 700; color: var(--teal-deep); margin: 14px 0 5px; }
+  .login-input { width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 7px; font-size: 14px; }
+  .login-input:focus { outline: none; border-color: var(--teal); }
+  .login-btn { width: 100%; margin-top: 20px; background: var(--teal-deep); color: #fff; border: none; padding: 10px; border-radius: 7px; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .login-btn:hover { background: var(--teal); }
+  .login-btn:disabled { opacity: 0.6; cursor: default; }
+  .login-error { color: var(--pending-ink); font-size: 12.5px; margin-top: 10px; }
+  .create-po-row { margin: 20px 0 0; }
+  .create-po-toggle { background: var(--teal-soft); color: var(--teal-deep); border: 1px solid var(--teal); font-weight: 700; font-size: 13px; padding: 9px 16px; border-radius: 8px; cursor: pointer; }
+  .create-po-toggle:hover { background: var(--teal); color: #fff; }
+  .create-po-card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 20px; margin-top: 12px; }
+  .create-po-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 6px; }
+  .items-label { font-size: 12px; font-weight: 700; color: var(--teal-deep); margin: 16px 0 8px; }
+  .item-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+  .row-remove { background: none; border: 1px solid var(--line); color: #93a19e; border-radius: 6px; width: 30px; height: 34px; cursor: pointer; flex-shrink: 0; }
+  .row-remove:hover { border-color: var(--pending-ink); color: var(--pending-ink); }
+  .add-item-btn { background: none; border: 1px dashed var(--line); color: var(--teal); font-size: 12.5px; padding: 7px 12px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+  .add-item-btn:hover { border-color: var(--teal); }
 </style>
 </head>
 <body>
@@ -140,6 +160,38 @@ Look carefully anywhere on the document for a referenced PO number. If none is p
   return JSON.parse(cleaned);
 }
 
+function LoginScreen({ onLogin }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    setError(""); setBusy(true);
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    setBusy(false);
+    if (error) { setError(error.message); return; }
+    onLogin(data.session);
+  }
+
+  return (
+    <div className="login-wrap">
+      <form className="login-card" onSubmit={submit}>
+        <div className="eyebrow">Procurement · Auto-Matching</div>
+        <h1 style={{ fontSize: 20, marginBottom: 4 }}>PO &amp; Invoice Tracker</h1>
+        <div className="subhead" style={{ marginBottom: 18 }}>Sign in with the account your admin created for you.</div>
+        <label className="login-label">Email</label>
+        <input className="login-input" type="email" value={email} onChange={e => setEmail(e.target.value)} required autoFocus />
+        <label className="login-label">Password</label>
+        <input className="login-input" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+        {error && <div className="login-error">{error}</div>}
+        <button className="login-btn" type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
+      </form>
+    </div>
+  );
+}
+
 function App() {
   const [pos, setPos] = useState([]);
   const [invoices, setInvoices] = useState([]);
@@ -147,9 +199,29 @@ function App() {
   const [loaded, setLoaded] = useState(false);
   const [dragPo, setDragPo] = useState(false);
   const [dragInv, setDragInv] = useState(false);
+  const [session, setSession] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [formPoNumber, setFormPoNumber] = useState("");
+  const [formDate, setFormDate] = useState("");
+  const [formSupplier, setFormSupplier] = useState("");
+  const [formItems, setFormItems] = useState([{ description: "", qty: "", unit_price: "" }]);
+  const [formError, setFormError] = useState("");
 
   useEffect(() => {
-    if (!configured) { setLoaded(true); return; }
+    if (!configured) { setAuthChecked(true); return; }
+    supabaseClient.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setAuthChecked(true);
+    });
+    const { data: listener } = supabaseClient.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!configured || !session) { setLoaded(true); return; }
     (async () => {
       const { data, error } = await supabaseClient.from("app_data").select("*");
       if (!error && data) {
@@ -158,11 +230,52 @@ function App() {
       }
       setLoaded(true);
     })();
-  }, []);
+  }, [session]);
 
   async function saveRecord(kind, record) {
     if (!supabaseClient) return;
     await supabaseClient.from("app_data").upsert({ id: record.id, kind, payload: record });
+  }
+
+  function updateFormItem(idx, field, value) {
+    setFormItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
+  }
+  function addFormItem() {
+    setFormItems(prev => [...prev, { description: "", qty: "", unit_price: "" }]);
+  }
+  function removeFormItem(idx) {
+    setFormItems(prev => prev.length === 1 ? prev : prev.filter((_, i) => i !== idx));
+  }
+  function resetCreateForm() {
+    setFormPoNumber(""); setFormDate(""); setFormSupplier("");
+    setFormItems([{ description: "", qty: "", unit_price: "" }]);
+    setFormError("");
+  }
+  async function submitManualPO(e) {
+    e.preventDefault();
+    setFormError("");
+    if (!formPoNumber.trim()) { setFormError("PO Number is required."); return; }
+    const cleanItems = formItems
+      .filter(it => it.description.trim())
+      .map(it => ({
+        id: uid(),
+        description: it.description.trim(),
+        qty: it.qty === "" ? null : Number(it.qty),
+        unit_price: it.unit_price === "" ? null : Number(it.unit_price),
+      }));
+    if (cleanItems.length === 0) { setFormError("Add at least one item with a description."); return; }
+    const record = {
+      id: uid(), fileName: null,
+      poNumber: formPoNumber.trim(),
+      date: formDate || null,
+      supplier: formSupplier.trim() || null,
+      uploadedBy: session?.user?.email || "Unknown",
+      items: cleanItems,
+    };
+    setPos(prev => [...prev, record]);
+    await saveRecord("po", record);
+    resetCreateForm();
+    setShowCreateForm(false);
   }
 
   async function handleFiles(fileList, kind) {
@@ -172,12 +285,14 @@ function App() {
       setQueue(q => [...q, { id: qid, name: file.name, status: "working" }]);
       try {
         const extracted = await extractViaServer(file, kind);
+        const uploadedBy = session?.user?.email || "Unknown";
         if (kind === "po") {
           const record = {
             id: uid(), fileName: file.name,
             poNumber: extracted.po_number || "Unknown",
             date: extracted.date || null,
             supplier: extracted.supplier || null,
+            uploadedBy,
             items: (extracted.items || []).map(it => ({ id: uid(), ...it })),
           };
           setPos(prev => [...prev, record]);
@@ -190,6 +305,7 @@ function App() {
             supplier: extracted.supplier || null,
             date: extracted.date || null,
             totalAmount: extracted.total_amount || null,
+            uploadedBy,
             items: (extracted.items || []).map(it => ({ id: uid(), ...it, matchedPoItemId: null })),
           };
           setInvoices(prev => [...prev, record]);
@@ -257,20 +373,72 @@ function App() {
   const allPoItemOptions = [];
   pos.forEach(po => po.items.forEach(it => allPoItemOptions.push({ id: it.id, label: `${po.poNumber} — ${it.description}` })));
 
+  if (!authChecked) return <div className="empty">Loading…</div>;
+  if (configured && !session) return <LoginScreen onLogin={setSession} />;
   if (!loaded) return <div className="empty">Loading…</div>;
 
   return (
     <div>
-      <div className="header">
-        <div className="eyebrow">Procurement · Auto-Matching</div>
-        <h1>PO &amp; Invoice Tracker</h1>
-        <div className="subhead">Drop in a purchase order once, then drop in each supplier invoice as it arrives. Line items are read automatically and matched — shared with your whole team, no chat session needed.</div>
+      <div className="header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div>
+          <div className="eyebrow">Procurement · Auto-Matching</div>
+          <h1>PO &amp; Invoice Tracker</h1>
+          <div className="subhead">Drop in a purchase order once, then drop in each supplier invoice as it arrives. Line items are read automatically and matched — shared with your whole team, no chat session needed.</div>
+        </div>
+        {session && (
+          <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 16 }}>
+            <div className="muted" style={{ marginBottom: 6 }}>{session.user.email}</div>
+            <button className="reset-btn" onClick={() => supabaseClient.auth.signOut()}>Sign out</button>
+          </div>
+        )}
       </div>
 
       {!configured && (
         <div className="config-warning">
           ⚠️ This app isn't fully set up yet — the Supabase URL and key near the top of index.html still say "PASTE_YOUR..." Follow Step 5 of the setup guide to finish connecting shared storage.
         </div>
+      )}
+
+      <div className="create-po-row">
+        <button className="create-po-toggle" onClick={() => setShowCreateForm(s => !s)}>
+          {showCreateForm ? "✕ Close" : "+ Create a Purchase Order"}
+        </button>
+      </div>
+
+      {showCreateForm && (
+        <form className="create-po-card" onSubmit={submitManualPO}>
+          <div className="create-po-grid">
+            <div>
+              <label className="login-label">PO Number *</label>
+              <input className="login-input" value={formPoNumber} onChange={e => setFormPoNumber(e.target.value)} placeholder="PO-2026-014" required />
+            </div>
+            <div>
+              <label className="login-label">Date</label>
+              <input className="login-input" type="date" value={formDate} onChange={e => setFormDate(e.target.value)} />
+            </div>
+            <div>
+              <label className="login-label">Supplier</label>
+              <input className="login-input" value={formSupplier} onChange={e => setFormSupplier(e.target.value)} placeholder="ABC Textiles Pte Ltd" />
+            </div>
+          </div>
+
+          <div className="items-label">Items</div>
+          {formItems.map((it, idx) => (
+            <div className="item-row" key={idx}>
+              <input className="login-input" placeholder="Item description" value={it.description}
+                onChange={e => updateFormItem(idx, "description", e.target.value)} style={{ flex: 3 }} />
+              <input className="login-input" placeholder="Qty" type="number" value={it.qty}
+                onChange={e => updateFormItem(idx, "qty", e.target.value)} style={{ flex: 1 }} />
+              <input className="login-input" placeholder="Unit price" type="number" step="0.01" value={it.unit_price}
+                onChange={e => updateFormItem(idx, "unit_price", e.target.value)} style={{ flex: 1 }} />
+              <button type="button" className="row-remove" onClick={() => removeFormItem(idx)} title="Remove item">✕</button>
+            </div>
+          ))}
+          <button type="button" className="add-item-btn" onClick={addFormItem}>+ Add another item</button>
+
+          {formError && <div className="login-error">{formError}</div>}
+          <button className="login-btn" type="submit" style={{ marginTop: 16 }}>Save Purchase Order</button>
+        </form>
       )}
 
       <div className="drop-row">
@@ -318,7 +486,7 @@ function App() {
         <div className="empty">No purchase orders uploaded yet. Drop one in above to get started.</div>
       ) : (
         <table>
-          <thead><tr><th>PO #</th><th>Item</th><th>Qty</th><th>Status</th><th>Matched Invoice</th></tr></thead>
+          <thead><tr><th>PO #</th><th>Item</th><th>Qty</th><th>Status</th><th>Matched Invoice</th><th>Logged By</th></tr></thead>
           <tbody>
             {pos.map(po => po.items.map((item, idx) => {
               const m = matches[item.id];
@@ -329,6 +497,7 @@ function App() {
                   <td>{item.qty ?? <span className="muted">—</span>}</td>
                   <td>{m ? <span className="badge received">Received</span> : <span className="badge pending">Pending</span>}</td>
                   <td>{m ? `${m.invoice.invoiceNumber}${m.invoice.supplier ? " · " + m.invoice.supplier : ""}` : <span className="muted">Awaiting invoice</span>}</td>
+                  <td className="muted">{m ? m.invoice.uploadedBy : po.uploadedBy}</td>
                 </tr>
               );
             }))}
